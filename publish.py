@@ -12,48 +12,55 @@ DB_URI = "postgresql://admin:admin123@localhost:5432/kaggle_db"
 # -----------------------------------------------------------
 # 2) GOOGLE SHEETS CONFIG
 # -----------------------------------------------------------
-CREDENTIALS_FILE = "credentials.json"   # ต้องวางไฟล์ไว้ในโฟลเดอร์ e-com2
-SPREADSHEET_ID = "19vEFyHbJnMK7Sto8n9KWG0lGmOHHR_emUkoxU40SKjI"
-  # ของคุณ
+CREDENTIALS_FILE = "credentials.json"   # ต้องวางไฟล์นี้ในโฟลเดอร์ e-com2
+#SPREADSHEET_ID = "19vEFyHbJnMK7Sto8n9KWG0lGmOHHR_emUkoxU40SKjI"  # แก้เป็นของคุณได้
+#WORKSHEET_NAME = "fact_sales"  # ชื่อชีตใน Spreadsheet
+SPREADSHEET_ID = "1zC5TVxUS3krUJ3aBOWswP7aTdjbwAdPvVAfdv2o7Hlw"
+WORKSHEET_NAME = "fact_sales"
 
-# -----------------------------------------------------------
-# 3) FUNCTION: UPLOAD TO GOOGLE SHEETS
-# -----------------------------------------------------------
+
 def publish():
-    print("📤 Uploading Data to Google Sheets...")
+    print("📤 Publishing data from PostgreSQL → Google Sheets...")
 
-    # 1) Connect PostgreSQL
+    # 1) อ่านข้อมูลจาก production.fact_sales
     engine = create_engine(DB_URI)
+    query = "SELECT * FROM production.fact_sales"
+    df = pd.read_sql(query, engine)
 
-    # 2) Load fact_sales
-    df = pd.read_sql("SELECT * FROM production.fact_sales", engine)
-    print(f"📦 Loaded {len(df):,} rows from production.fact_sales")
-
-    # 3) Google Sheets Auth
-    scope = [
+    # 2) เตรียม Credentials ของ Service Account
+    scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
+        "https://www.googleapis.com/auth/drive",
     ]
 
     creds = ServiceAccountCredentials.from_json_keyfile_name(
-        CREDENTIALS_FILE, scope
+        CREDENTIALS_FILE,
+        scopes,
     )
+
     client = gspread.authorize(creds)
 
-    # ⭐ 4) เปิด Google Sheet ด้วย SPREADSHEET_ID (ไม่สร้างใหม่)
+    # 3) เปิด Spreadsheet
     sh = client.open_by_key(SPREADSHEET_ID)
-    worksheet = sh.sheet1  # ใช้ Sheet แรก
 
-    # 5) ล้างข้อมูลเก่าเพื่อป้องกันทับซ้อน
+    # 4) เปิด/สร้าง Worksheet
+    try:
+        worksheet = sh.worksheet(WORKSHEET_NAME)
+    except gspread.WorksheetNotFound:
+        worksheet = sh.add_worksheet(
+            title=WORKSHEET_NAME,
+            rows=str(len(df) + 10),
+            cols=str(len(df.columns) + 10),
+        )
+
+    # 5) ล้างข้อมูลเก่า
     worksheet.clear()
 
-    # 6) อัปโหลดแบบ DataFrame
+    # 6) เขียน DataFrame ลง Google Sheets
     set_with_dataframe(worksheet, df)
 
-    print("✅ Upload Completed!")
+    print("✅ Upload Completed! Google Sheets is ready.")
 
-# -----------------------------------------------------------
-# RUN
-# -----------------------------------------------------------
+
 if __name__ == "__main__":
     publish()

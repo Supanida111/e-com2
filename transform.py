@@ -1,70 +1,74 @@
+import pandas as pd
 from sqlalchemy import create_engine, text
 
 DB_URI = "postgresql://admin:admin123@localhost:5432/kaggle_db"
 
-def publish():
-    print("📤 Creating Looker Studio Views...")
+
+def transform():
+    print("🔧 Transforming Data...")
 
     engine = create_engine(DB_URI)
 
-    with engine.begin() as conn:   # ใช้ begin() เพื่อ auto-commit
+    # 1) ดึงข้อมูลดิบจาก raw_data.kaggle_raw
+    df = pd.read_sql_table(
+        "kaggle_raw",
+        con=engine,
+        schema="raw_data"
+    )
+    print(f"📥 Loaded raw_data.kaggle_raw: {len(df):,} rows")
 
-        conn.execute(text("""
-            CREATE OR REPLACE VIEW public.vw_best_selling_products AS
-            SELECT
-                description AS product_name,
-                SUM(quantity) AS total_quantity,
-                SUM(unitprice * quantity) AS total_revenue
-            FROM production.fact_sales
-            WHERE quantity > 0
-            GROUP BY description
-            ORDER BY total_quantity DESC;
-        """))
+    # 2) ลบแถวที่ข้อมูลสำคัญหาย
+    df = df.dropna(
+        subset=[
+            "InvoiceNo",
+            "StockCode",
+            "Description",
+            "Quantity",
+            "InvoiceDate",
+            "UnitPrice",
+            "CustomerID",
+            "Country",
+        ]
+    )
 
-        conn.execute(text("""
-            CREATE OR REPLACE VIEW public.vw_sales_by_country AS
-            SELECT
-                country,
-                SUM(unitprice * quantity) AS total_revenue
-            FROM production.fact_sales
-            WHERE quantity > 0
-            GROUP BY country
-            ORDER BY total_revenue DESC;
-        """))
+    # 3) ตัดแถวที่จำนวนหรือราคาติดลบ / เป็นศูนย์
+    df = df[df["Quantity"] > 0]
+    df = df[df["UnitPrice"] > 0]
 
-        conn.execute(text("""
-            CREATE OR REPLACE VIEW public.vw_monthly_sales_trend AS
-            SELECT
-                month,
-                SUM(unitprice * quantity) AS total_revenue
-            FROM production.fact_sales
-            WHERE quantity > 0
-            GROUP BY month
-            ORDER BY month ASC;
-        """))
+    # 4) แปลง InvoiceDate ให้เป็น datetime
+    df["InvoiceDate"] = pd.to_datetime(df["InvoiceDate"])
 
-        conn.execute(text("""
-            CREATE OR REPLACE VIEW public.vw_top_customer AS
-            SELECT
-                customerid,
-                SUM(unitprice * quantity) AS total_spent
-            FROM production.fact_sales
-            WHERE quantity > 0
-            GROUP BY customerid
-            ORDER BY total_spent DESC;
-        """))
+    # 5) ลบแถวซ้ำ
+    df = df.drop_duplicates()
 
-        conn.execute(text("""
-            CREATE OR REPLACE VIEW public.vw_cancel_rate_by_product AS
-            SELECT
-                description AS product_name,
-                SUM(CASE WHEN quantity < 0 THEN 1 ELSE 0 END) AS cancel_count
-            FROM production.fact_sales
-            GROUP BY description
-            ORDER BY cancel_count DESC;
-        """))
+    # 6) สร้างคอลัมน์ใหม่สำหรับใช้ทำ Dashboard / KPI
+    df["TotalPrice"] = df["Quantity"] * df["UnitPrice"]
+    df["InvoiceYear"] = df["InvoiceDate"].dt.year
+    df["InvoiceMonth"] = df["InvoiceDate"].dt.month
+    df["InvoiceDay"] = df["InvoiceDate"].dt.day
+    df["InvoiceHour"] = df["InvoiceDate"].dt.hour
 
-    print("✅ All Views Created Successfully!")
+    print(f"✅ After cleaning: {len(df):,} rows")
+
+    # 7) เขียนลง production.fact_sales
+    #    ลบตารางเดิมทิ้งไปเลย (ถ้ามี) พร้อม view ที่ผูกอยู่ (CASCADE)
+    with engine.begin() as conn:
+        print("⚠️ DROP TABLE production.fact_sales CASCADE (if exists) ...")
+        conn.execute(text("DROP TABLE IF EXISTS production.fact_sales CASCADE;"))
+
+        print("💾 Creating & writing production.fact_sales from DataFrame ...")
+        df.to_sql(
+            "fact_sales",
+            con=conn,
+            schema="production",
+            if_exists="append",  # ถ้าไม่มีตาราง → pandas จะสร้างให้เอง
+            index=False,
+            chunksize=5000,      # แบ่ง insert ทีละ 5000 แถว ลดโอกาสค้าง
+        )
+
+    print("✅ Transform Completed! Data saved to production.fact_sales")
+
 
 if __name__ == "__main__":
-    publish()
+    transform()
+

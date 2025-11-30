@@ -62,81 +62,79 @@ e-com2/
 
 ---
 
-วิธีรันโปรเจค 
-1) เปิดโฟลเดอร์โปรเจค
+🚀 วิธีรันโปรเจกต์บน GitHub (How to Run This Project)
+1️⃣ Clone โปรเจกต์จาก GitHub
+git clone https://github.com/Supanida111/e-com2.git
+cd e-com2
 
-เปิด VS Code และเลือกเมนู File → Open Folder…
-จากนั้นเลือกโฟลเดอร์โปรเจค e-com2
+2️⃣ สร้างและเปิดใช้งาน Virtual Environment
 
-2) เปิด Terminal และเปิดใช้งาน Virtual Environment
+Windows
 
-เปิด Terminal ใน VS Code:
-
-Terminal → New Terminal
-
-
-จากนั้นรันคำสั่งต่อไปนี้:
-
-cd "C:\Users\user\OneDrive\leaning\3.1\e-com2"
-.\.venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\activate
 
 
-ถ้าสำเร็จจะเห็น (.venv) ขึ้นหน้าบรรทัด Terminal
+Mac / Linux
 
-3) ติดตั้ง Dependencies (ทำครั้งแรกครั้งเดียว)
-python -m pip install --upgrade pip
-python -m pip install pandas sqlalchemy psycopg2-binary gspread gspread-dataframe oauth2client
+python3 -m venv .venv
+source .venv/bin/activate
 
-4) ตั้งค่าการเชื่อมต่อฐานข้อมูลและ Google Sheets
+3️⃣ ติดตั้ง Dependencies ทั้งหมด
+pip install -r requirements.txt
 
-ตรวจไฟล์เหล่านี้:
 
-ingest.py, transform.py, publish.py
+ถ้าไม่มีไฟล์ requirements.txt ให้สร้างโดยคัดลอกสิ่งนี้ใส่ไฟล์ใหม่:
 
-ตรวจ DB_URI ต้องเป็น:
+pandas
+sqlalchemy
+psycopg2-binary
+gspread
+gspread-dataframe
+oauth2client
+python-dotenv
+
+4️⃣ ตั้งค่าการเชื่อมต่อ Database และ Google Sheets
+
+ตรวจสอบไฟล์เหล่านี้:
+
+📌 ingest.py, transform.py, publish.py
+
+ต้องมีค่า DB_URI แบบนี้:
 
 DB_URI = "postgresql://admin:admin123@localhost:5432/kaggle_db"
 
 
-ตรวจไฟล์ publish.py:
+ตรวจไฟล์ publish.py ต้องกำหนด:
 
 CREDENTIALS_FILE = "credentials.json"
-SPREADSHEET_ID = "ใส่ Spreadsheet ID ที่นี่"
+SPREADSHEET_ID = "YOUR_SPREADSHEET_ID"
 WORKSHEET_NAME = "fact_sales"
 
 
-ตรวจว่าไฟล์ credentials.json ถูกวางในโฟลเดอร์โปรเจคเดียวกับ publish.py
+นำไฟล์ credentials.json จาก Google Cloud Service Account
+ไปวางในโฟลเดอร์เดียวกับ publish.py.
 
-แชร์ Google Sheets ให้ Service Account:
+แชร์ Google Sheet ให้ Service Account ด้วยสิทธิ์ Editor.
 
-เปิด Google Sheets
-
-กด Share
-
-ใส่อีเมลของ service account
-
-ตั้งเป็น Editor
-
-5) รัน Pipeline ทีละขั้น
-5.1 Ingest – โหลดข้อมูล CSV ลง PostgreSQL
+5️⃣ รัน Pipeline ทีละขั้นตอน
+5.1 Ingest → โหลด CSV ลง PostgreSQL
 python ingest.py
 
-5.2 Transform – ทำความสะอาดข้อมูล + สร้าง Fact Table
+5.2 Transform → ทำความสะอาดข้อมูล → fact_sales
 python transform.py
 
-5.3 Publish – ส่งข้อมูลขึ้น Google Sheets
+5.3 Publish → ส่งข้อมูลขึ้น Google Sheets
 python publish.py
 
-6) รันแบบรวดเดียว (Ingest → Transform → Publish)
-
-ถ้าต้องการรันทุกขั้นตอนอัตโนมัติ:
-
+6️⃣ รันแบบรวดเดียว (All-in-One)
 python run_pipeline.py
 
-7) ดูผลลัพธ์บน Dashboard
+7️⃣ ดูผลลัพธ์บน Dashboard
+✔ Google Sheets
 
-เปิด Google Sheets → เช็กว่าชีต fact_sales ถูกอัปเดต
+ข้อมูลจะถูกส่งไปที่ Worksheet: fact_sales
 
-เปิด Looker Studio → เชื่อมข้อมูลกับชีตนี้
+✔ Looker Studio
 
-Dashboard จะอัปเดตอัตโนมัติทุกครั้งที่รัน publish.py
+เชื่อม Google Sheets → แล้ว Refresh Dashboard ได้ทันที
